@@ -2,9 +2,9 @@ name: Deploy Backend
 
 on:
   push:
-    branches: ["main"]
-    paths:
-     - "app/**"
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -20,7 +20,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "backend/**"
+          source: "app/**"
           target: "/home/${{ secrets.SSH_USER }}/crt-app/backend/"
           overwrite: true
 
