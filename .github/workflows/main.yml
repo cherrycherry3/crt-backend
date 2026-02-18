@@ -33,36 +33,31 @@ jobs:
           script: |
             cd /home/${{ secrets.SSH_USER }}/crt-app/backend
 
-            echo "Creating virtual environment if missing..."
             if [ ! -d "venv" ]; then
               python3 -m venv venv
             fi
 
-            echo "Installing dependencies..."
             ./venv/bin/pip install --upgrade pip
             ./venv/bin/pip install -r requirements.txt
-            ./venv/bin/pip install "uvicorn[standard]"
-
-            echo "Creating / Updating systemd service..."
+            ./venv/bin/pip install uvicorn
 
             SERVICE_FILE=/etc/systemd/system/fastapi.service
 
-            sudo bash -c "cat > $SERVICE_FILE" <<EOF
-[Unit]
-Description=FastAPI Backend Service
-After=network.target
+            sudo rm -f $SERVICE_FILE
 
-[Service]
-User=${{ secrets.SSH_USER }}
-WorkingDirectory=/home/${{ secrets.SSH_USER }}/crt-app/backend
-EnvironmentFile=/home/${{ secrets.SSH_USER }}/crt-app/backend/.env
-ExecStart=/home/${{ secrets.SSH_USER }}/crt-app/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
-Restart=always
-Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=multi-user.target
-EOF
+            echo "[Unit]" | sudo tee -a $SERVICE_FILE
+            echo "Description=FastAPI Backend Service" | sudo tee -a $SERVICE_FILE
+            echo "After=network.target" | sudo tee -a $SERVICE_FILE
+            echo "" | sudo tee -a $SERVICE_FILE
+            echo "[Service]" | sudo tee -a $SERVICE_FILE
+            echo "User=${{ secrets.SSH_USER }}" | sudo tee -a $SERVICE_FILE
+            echo "WorkingDirectory=/home/${{ secrets.SSH_USER }}/crt-app/backend" | sudo tee -a $SERVICE_FILE
+            echo "EnvironmentFile=/home/${{ secrets.SSH_USER }}/crt-app/backend/.env" | sudo tee -a $SERVICE_FILE
+            echo "ExecStart=/home/${{ secrets.SSH_USER }}/crt-app/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000" | sudo tee -a $SERVICE_FILE
+            echo "Restart=always" | sudo tee -a $SERVICE_FILE
+            echo "" | sudo tee -a $SERVICE_FILE
+            echo "[Install]" | sudo tee -a $SERVICE_FILE
+            echo "WantedBy=multi-user.target" | sudo tee -a $SERVICE_FILE
 
             sudo systemctl daemon-reload
             sudo systemctl enable fastapi
