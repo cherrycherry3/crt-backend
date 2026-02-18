@@ -22,7 +22,6 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "./*"
           target: "/home/${{ secrets.SSH_USER }}/crt-app/backend/"
-          strip_components: 0
           overwrite: true
 
       - name: Setup & Restart Backend
@@ -34,15 +33,39 @@ jobs:
           script: |
             cd /home/${{ secrets.SSH_USER }}/crt-app/backend
 
-            rm -rf deploy
-
+            echo "Creating virtual environment if missing..."
             if [ ! -d "venv" ]; then
               python3 -m venv venv
             fi
 
+            echo "Installing dependencies..."
             ./venv/bin/pip install --upgrade pip
             ./venv/bin/pip install -r requirements.txt
+            ./venv/bin/pip install "uvicorn[standard]"
 
-            sudo systemctl restart fastapi || true
+            echo "Creating / Updating systemd service..."
+
+            SERVICE_FILE=/etc/systemd/system/fastapi.service
+
+            sudo bash -c "cat > $SERVICE_FILE" <<EOF
+[Unit]
+Description=FastAPI Backend Service
+After=network.target
+
+[Service]
+User=${{ secrets.SSH_USER }}
+WorkingDirectory=/home/${{ secrets.SSH_USER }}/crt-app/backend
+EnvironmentFile=/home/${{ secrets.SSH_USER }}/crt-app/backend/.env
+ExecStart=/home/${{ secrets.SSH_USER }}/crt-app/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+            sudo systemctl daemon-reload
+            sudo systemctl enable fastapi
+            sudo systemctl restart fastapi
 
             echo "Deployment Successful"
