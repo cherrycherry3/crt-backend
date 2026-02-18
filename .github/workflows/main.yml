@@ -11,24 +11,78 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout Repository
       - name: Checkout Code
         uses: actions/checkout@v3
 
+      # 2️⃣ Prepare Clean Package
+      - name: Prepare Clean Backend Package
+        run: |
+          mkdir deploy
+          shopt -s dotglob
+          cp -r * deploy || true
+          rm -rf deploy/.git
+          rm -rf deploy/.github
+          rm -rf deploy/*.md
+          rm -rf deploy/LICENSE
+
+      # 3️⃣ Upload Files to Azure VM
       - name: Upload Backend to Server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "app/**"
+          source: "deploy/**"
           target: "/home/${{ secrets.SSH_USER }}/crt-app/backend/"
           overwrite: true
 
-      - name: Restart FastAPI Service
+      # 4️⃣ Configure & Restart Service
+      - name: Configure Backend on Server
         uses: appleboy/ssh-action@v1.0.1
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            echo "📁 Moving to project directory..."
+            cd /home/${{ secrets.SSH_USER }}/crt-app/backend
+
+            echo "🐍 Creating virtual environment if not exists..."
+            if [ ! -d "venv" ]; then
+              python3 -m venv venv
+            fi
+
+            echo "⬆️ Installing dependencies..."
+            ./venv/bin/pip install --upgrade pip
+            ./venv/bin/pip install -r requirements.txt
+
+            echo "🔐 Securing .env file..."
+            chmod 600 .env
+
+            echo "⚙️ Creating systemd service (if not exists)..."
+            if [ ! -f "/etc/systemd/system/fastapi.service" ]; then
+              sudo tee /etc/systemd/system/fastapi.service > /dev/null <<EOF
+[Unit]
+Description=FastAPI Backend Service
+After=network.target
+
+[Service]
+User=${{ secrets.SSH_USER }}
+WorkingDirectory=/home/${{ secrets.SSH_USER }}/crt-app/backend
+EnvironmentFile=/home/${{ secrets.SSH_USER }}/crt-app/backend/.env
+ExecStart=/home/${{ secrets.SSH_USER }}/crt-app/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+EOF
+              sudo systemctl daemon-reload
+              sudo systemctl enable fastapi
+            fi
+
+            echo "🚀 Restarting FastAPI..."
             sudo systemctl restart fastapi
+
+            echo "✅ Backend Deployment Successful!"
