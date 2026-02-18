@@ -14,25 +14,15 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Prepare Deploy Folder
-        run: |
-          rm -rf deploy
-          mkdir deploy
-          shopt -s dotglob
-          cp -r * deploy || true
-          rm -rf deploy/.git
-          rm -rf deploy/.github
-          rm -rf deploy/*.md
-          rm -rf deploy/LICENSE
-
-      - name: Upload to Server
+      - name: Upload Backend to Server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "deploy/*"
+          source: "./*"
           target: "/home/${{ secrets.SSH_USER }}/crt-app/backend/"
+          strip_components: 0
           overwrite: true
 
       - name: Setup & Restart Backend
@@ -44,6 +34,8 @@ jobs:
           script: |
             cd /home/${{ secrets.SSH_USER }}/crt-app/backend
 
+            rm -rf deploy
+
             if [ ! -d "venv" ]; then
               python3 -m venv venv
             fi
@@ -51,29 +43,6 @@ jobs:
             ./venv/bin/pip install --upgrade pip
             ./venv/bin/pip install -r requirements.txt
 
-            chmod 600 .env || true
-
-            SERVICE_FILE=/etc/systemd/system/fastapi.service
-
-            sudo rm -f $SERVICE_FILE
-
-            echo "[Unit]" | sudo tee -a $SERVICE_FILE
-            echo "Description=FastAPI Backend Service" | sudo tee -a $SERVICE_FILE
-            echo "After=network.target" | sudo tee -a $SERVICE_FILE
-            echo "" | sudo tee -a $SERVICE_FILE
-            echo "[Service]" | sudo tee -a $SERVICE_FILE
-            echo "User=${{ secrets.SSH_USER }}" | sudo tee -a $SERVICE_FILE
-            echo "WorkingDirectory=/home/${{ secrets.SSH_USER }}/crt-app/backend" | sudo tee -a $SERVICE_FILE
-            echo "EnvironmentFile=/home/${{ secrets.SSH_USER }}/crt-app/backend/.env" | sudo tee -a $SERVICE_FILE
-            echo "ExecStart=/home/${{ secrets.SSH_USER }}/crt-app/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000" | sudo tee -a $SERVICE_FILE
-            echo "Restart=always" | sudo tee -a $SERVICE_FILE
-            echo "Environment=PYTHONUNBUFFERED=1" | sudo tee -a $SERVICE_FILE
-            echo "" | sudo tee -a $SERVICE_FILE
-            echo "[Install]" | sudo tee -a $SERVICE_FILE
-            echo "WantedBy=multi-user.target" | sudo tee -a $SERVICE_FILE
-
-            sudo systemctl daemon-reload
-            sudo systemctl enable fastapi
-            sudo systemctl restart fastapi
+            sudo systemctl restart fastapi || true
 
             echo "Deployment Successful"
