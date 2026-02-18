@@ -14,7 +14,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Prepare Clean Backend Package
+      - name: Prepare Deploy Folder
         run: |
           rm -rf deploy
           mkdir deploy
@@ -25,8 +25,7 @@ jobs:
           rm -rf deploy/*.md
           rm -rf deploy/LICENSE
 
-      # ✅ FIXED HERE
-      - name: Upload Backend to Server
+      - name: Upload to Server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -36,7 +35,7 @@ jobs:
           target: "/home/${{ secrets.SSH_USER }}/crt-app/backend/"
           overwrite: true
 
-      - name: Configure Backend on Server
+      - name: Setup & Restart Backend
         uses: appleboy/ssh-action@v1.0.1
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -45,38 +44,36 @@ jobs:
           script: |
             cd /home/${{ secrets.SSH_USER }}/crt-app/backend
 
-            echo "Creating virtual environment if missing..."
             if [ ! -d "venv" ]; then
               python3 -m venv venv
             fi
 
-            echo "Installing dependencies..."
             ./venv/bin/pip install --upgrade pip
             ./venv/bin/pip install -r requirements.txt
 
             chmod 600 .env || true
 
-            echo "Creating systemd service..."
+            SERVICE_FILE=/etc/systemd/system/fastapi.service
 
-            sudo rm -f /etc/systemd/system/fastapi.service
+            sudo rm -f $SERVICE_FILE
 
-            sudo bash -c "echo '[Unit]' > /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo 'Description=FastAPI Backend Service' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo 'After=network.target' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo '' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo '[Service]' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo 'User=${{ secrets.SSH_USER }}' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo 'WorkingDirectory=/home/${{ secrets.SSH_USER }}/crt-app/backend' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo 'EnvironmentFile=/home/${{ secrets.SSH_USER }}/crt-app/backend/.env' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo 'ExecStart=/home/${{ secrets.SSH_USER }}/crt-app/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo 'Restart=always' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo 'Environment=PYTHONUNBUFFERED=1' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo '' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo '[Install]' >> /etc/systemd/system/fastapi.service"
-            sudo bash -c "echo 'WantedBy=multi-user.target' >> /etc/systemd/system/fastapi.service"
+            echo "[Unit]" | sudo tee -a $SERVICE_FILE
+            echo "Description=FastAPI Backend Service" | sudo tee -a $SERVICE_FILE
+            echo "After=network.target" | sudo tee -a $SERVICE_FILE
+            echo "" | sudo tee -a $SERVICE_FILE
+            echo "[Service]" | sudo tee -a $SERVICE_FILE
+            echo "User=${{ secrets.SSH_USER }}" | sudo tee -a $SERVICE_FILE
+            echo "WorkingDirectory=/home/${{ secrets.SSH_USER }}/crt-app/backend" | sudo tee -a $SERVICE_FILE
+            echo "EnvironmentFile=/home/${{ secrets.SSH_USER }}/crt-app/backend/.env" | sudo tee -a $SERVICE_FILE
+            echo "ExecStart=/home/${{ secrets.SSH_USER }}/crt-app/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000" | sudo tee -a $SERVICE_FILE
+            echo "Restart=always" | sudo tee -a $SERVICE_FILE
+            echo "Environment=PYTHONUNBUFFERED=1" | sudo tee -a $SERVICE_FILE
+            echo "" | sudo tee -a $SERVICE_FILE
+            echo "[Install]" | sudo tee -a $SERVICE_FILE
+            echo "WantedBy=multi-user.target" | sudo tee -a $SERVICE_FILE
 
             sudo systemctl daemon-reload
             sudo systemctl enable fastapi
             sudo systemctl restart fastapi
 
-            echo "Deployment Successful!"
+            echo "Deployment Successful"
