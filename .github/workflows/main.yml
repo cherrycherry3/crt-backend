@@ -11,11 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 2️⃣ Prepare clean deployment folder
       - name: Prepare Clean Backend Package
         run: |
           mkdir deploy
@@ -26,7 +24,6 @@ jobs:
           rm -rf deploy/*.md
           rm -rf deploy/LICENSE
 
-      # 3️⃣ Upload project to Azure VM
       - name: Upload Backend to Server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -37,7 +34,6 @@ jobs:
           target: "/home/${{ secrets.SSH_USER }}/crt-app/backend/"
           overwrite: true
 
-      # 4️⃣ Setup virtualenv + install deps + restart service
       - name: Configure Backend on Server
         uses: appleboy/ssh-action@v1.0.1
         with:
@@ -47,39 +43,38 @@ jobs:
           script: |
             cd /home/${{ secrets.SSH_USER }}/crt-app/backend
 
-            echo "🐍 Creating virtual environment if missing..."
             if [ ! -d "venv" ]; then
               python3 -m venv venv
             fi
 
-            echo "⬆️ Installing dependencies..."
             ./venv/bin/pip install --upgrade pip
             ./venv/bin/pip install -r requirements.txt
 
-            echo "🔐 Securing .env file..."
             chmod 600 .env || true
 
-            echo "⚙️ Creating systemd service..."
-            sudo bash -c 'cat > /etc/systemd/system/fastapi.service <<SERVICE
-[Unit]
-Description=FastAPI Backend Service
-After=network.target
+            echo Creating systemd service...
 
-[Service]
-User=${{ secrets.SSH_USER }}
-WorkingDirectory=/home/${{ secrets.SSH_USER }}/crt-app/backend
-EnvironmentFile=/home/${{ secrets.SSH_USER }}/crt-app/backend/.env
-ExecStart=/home/${{ secrets.SSH_USER }}/crt-app/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
-Restart=always
-Environment=PYTHONUNBUFFERED=1
+            sudo rm -f /etc/systemd/system/fastapi.service
 
-[Install]
-WantedBy=multi-user.target
-SERVICE'
+            sudo touch /etc/systemd/system/fastapi.service
 
-            echo "🚀 Restarting FastAPI..."
+            sudo bash -c "echo '[Unit]' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo 'Description=FastAPI Backend Service' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo 'After=network.target' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo '' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo '[Service]' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo 'User=${{ secrets.SSH_USER }}' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo 'WorkingDirectory=/home/${{ secrets.SSH_USER }}/crt-app/backend' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo 'EnvironmentFile=/home/${{ secrets.SSH_USER }}/crt-app/backend/.env' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo 'ExecStart=/home/${{ secrets.SSH_USER }}/crt-app/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo 'Restart=always' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo 'Environment=PYTHONUNBUFFERED=1' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo '' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo '[Install]' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo 'WantedBy=multi-user.target' >> /etc/systemd/system/fastapi.service"
+
             sudo systemctl daemon-reload
             sudo systemctl enable fastapi
             sudo systemctl restart fastapi
 
-            echo "✅ Backend Deployment Successful!"
+            echo Deployment Successful!
