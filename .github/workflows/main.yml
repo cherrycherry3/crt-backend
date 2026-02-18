@@ -16,6 +16,7 @@ jobs:
 
       - name: Prepare Clean Backend Package
         run: |
+          rm -rf deploy
           mkdir deploy
           shopt -s dotglob
           cp -r * deploy || true
@@ -24,13 +25,14 @@ jobs:
           rm -rf deploy/*.md
           rm -rf deploy/LICENSE
 
+      # ✅ FIXED HERE
       - name: Upload Backend to Server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "deploy/**"
+          source: "deploy/*"
           target: "/home/${{ secrets.SSH_USER }}/crt-app/backend/"
           overwrite: true
 
@@ -43,22 +45,22 @@ jobs:
           script: |
             cd /home/${{ secrets.SSH_USER }}/crt-app/backend
 
+            echo "Creating virtual environment if missing..."
             if [ ! -d "venv" ]; then
               python3 -m venv venv
             fi
 
+            echo "Installing dependencies..."
             ./venv/bin/pip install --upgrade pip
             ./venv/bin/pip install -r requirements.txt
 
             chmod 600 .env || true
 
-            echo Creating systemd service...
+            echo "Creating systemd service..."
 
             sudo rm -f /etc/systemd/system/fastapi.service
 
-            sudo touch /etc/systemd/system/fastapi.service
-
-            sudo bash -c "echo '[Unit]' >> /etc/systemd/system/fastapi.service"
+            sudo bash -c "echo '[Unit]' > /etc/systemd/system/fastapi.service"
             sudo bash -c "echo 'Description=FastAPI Backend Service' >> /etc/systemd/system/fastapi.service"
             sudo bash -c "echo 'After=network.target' >> /etc/systemd/system/fastapi.service"
             sudo bash -c "echo '' >> /etc/systemd/system/fastapi.service"
@@ -77,4 +79,4 @@ jobs:
             sudo systemctl enable fastapi
             sudo systemctl restart fastapi
 
-            echo Deployment Successful!
+            echo "Deployment Successful!"
